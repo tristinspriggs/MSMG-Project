@@ -1,35 +1,180 @@
 
+breed [tunnels tunnel]
+breed [holes hole]
+breed [bases base]
+breed [nvas nva]
+
+tunnels-own [prob dig-speed angle role stopped?]
+
+
 to setup
   clear-all
-  create-turtles 100 [ setxy random-xcor random-ycor ]
+  initialize-tunnels 10
+  initialize-bases
+  ask patches [
+   set pcolor 51
+  ]
   reset-ticks
 end
 
+to go
+  grow-tunnels
+  grow-holes
+  decide-base-attack
+  tick
+end
 
+to decide-base-attack
+  let radius 15
+  ask bases [
+     ask tunnels in-radius radius [
+      set color pink
+      set role "to-encircle"
+    ]
+  ]
+end
+
+to initialize-tunnels [num]
+  create-tunnels num [
+    setxy random-xcor random-ycor
+    set size 0
+    set color red
+    set prob random-float 0.005
+    set dig-speed random-float 0.1
+    set heading random 360
+    set role one-of ["to-base" "to-explore"]
+    set angle one-of [90 -90]
+  ]
+  ask tunnels [
+    hatch-holes 1 [
+      setxy xcor ycor
+      set size 2
+      set color 33
+      set shape "circle"
+    ]
+  ]
+end
+
+to move-open-min ;; turtle procedure
+  let nearby-holes other holes in-radius 10
+  ifelse any? nearby-holes
+  [ facexy (mean [xcor] of nearby-holes)
+           (mean [ycor] of nearby-holes)
+    rt 180
+    avoid-walls
+    fd dig-speed
+    set stopped? false ]
+  [ set stopped? true ]
+end
+
+to grow-tunnels
+  ask tunnels [
+    let closest-base min-one-of bases [distance myself]
+    if role = "to-base" [
+      face closest-base
+      let angle-error 45
+      ifelse random 10 < 5
+      [ rt random-float angle-error ]
+      [ lt random-float angle-error ]
+      forward dig-speed
+    ]
+    if role = "to-encircle" [
+      face closest-base
+      rt angle
+      let angle-error 45
+      ifelse random 10 < 5
+      [ rt random-float angle-error ]
+      [ lt random-float angle-error ]
+      forward dig-speed / 10
+    ]
+    if role = "to-explore" [
+     let nearby-holes other holes in-radius 10
+      ifelse any? nearby-holes
+      [ facexy (mean [xcor] of nearby-holes)
+               (mean [ycor] of nearby-holes)
+        rt 180
+        avoid-walls
+        fd dig-speed
+        set stopped? false ]
+      [ set stopped? true ]
+    ]
+  ]
+end
+
+to avoid-walls ;; turtle procedure
+  if not can-move? 1
+  [ rt 180 ]
+end
+
+to grow-holes
+  ask tunnels [
+    let p random-float 1
+    let num-tunnels count holes in-radius 10
+    if p < prob and num-tunnels = 0 [
+      new-hole xcor ycor
+    ]
+  ]
+end
+
+to new-hole [x y]
+  hatch-holes 1 [
+    setxy x y
+    set size 2
+    set color 31
+    set shape "circle"
+  ]
+end
+
+to new-nva [x y]
+  hatch-nvas 1[
+   setxy x y
+   set color red
+   set size 1
+  ]
+end
+
+to initialize-bases
+  create-bases 1 [
+    setxy  25 0
+    set shape "square"
+    set color 94
+    set size 10
+  ]
+  let hill-coordinates [ [-45 35] [-20 55] ]
+  foreach hill-coordinates [
+   c ->
+   create-bases 1 [
+      setxy item 0 c item 1 c
+      set shape "square"
+      set color 94
+      set size 3
+   ]
+  ]
+end
 @#$#@#$#@
 GRAPHICS-WINDOW
 210
 10
-638
-439
+641
+382
 -1
 -1
-20.0
+3.0
 1
 10
 1
 1
 1
 0
-1
-1
-1
--10
-10
--10
-10
 0
 0
+1
+-70
+70
+-60
+60
+1
+1
 1
 ticks
 30.0
@@ -40,8 +185,25 @@ BUTTON
 101
 65
 setup
+setup
+NIL
+1
+T
+OBSERVER
 NIL
 NIL
+NIL
+NIL
+1
+
+BUTTON
+43
+122
+106
+155
+go
+go
+T
 1
 T
 OBSERVER
