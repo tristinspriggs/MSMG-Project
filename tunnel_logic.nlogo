@@ -28,6 +28,7 @@ patches-own [
   elevation
   us-visited
   nva-visited
+  bombed
 ]
 
 to setup
@@ -51,12 +52,59 @@ to go
   spawn-nva
   move-nva
   move-marines
+  ask-bombardment
+  paint-bombed
+  evaporation
   destroy-base
   ;update-intelligence
   destroy-holes
   if any? bases [tick]
 end
 
+to ask-bombardment
+  if mouse-down?
+  [
+    ask patch mouse-xcor mouse-ycor [
+      (ifelse
+        aircraft-type = "B-52D" [
+          let radius-bomb 4
+          ask patches in-radius radius-bomb [
+            set bombed 100
+          ]
+          ask turtles in-radius radius-bomb [
+            die
+          ]
+        ]
+        aircraft-type = "F-4 Phantom II" [
+          let radius-bomb 2
+          ask patches in-radius radius-bomb [
+            set bombed 100
+          ]
+          ask turtles in-radius radius-bomb [
+            die
+          ]
+        ]
+        )
+    ]
+  ]
+end
+
+to paint-bombed
+  ask patches
+  [
+    if bombed = 100 [set pcolor white]
+    if bombed = 0 [set pcolor grey]
+    if bombed > 10 [set pcolor scale-color white bombed -11 60]
+  ]
+end
+
+to evaporation
+  diffuse bombed (20 / 100)
+  ask patches [
+    set bombed bombed * 0.8
+    if bombed < 10 [ set bombed 0 ]
+  ]
+end
 
 
 ;; Logic & Movement
@@ -200,7 +248,7 @@ to new-nva [x y]
     set size 1
     set role one-of ["to-base" "to-wait" "to-explore"]
     set speed 0.5
-    set prob random-float 0.0005
+    set prob random-float 0.05
     set retreat? false
   ]
 end
@@ -220,7 +268,7 @@ to spawn-hole [x y]
     set size 2
     set color 32
     set shape "circle"
-    set prob random-float 0.005
+    set prob random-float 0.01
   ]
 end
 
@@ -232,7 +280,7 @@ to initialize-bases
     set color 94
     set size 10
     set encircle-radius 10
-    spawn-marines-at-base 400
+    spawn-marines-at-base 200
   ]
   let hill-coordinates [ [-45 35] [-20 55] ]
   foreach hill-coordinates [
@@ -243,7 +291,7 @@ to initialize-bases
       set color 94
       set size 3
       set encircle-radius 6
-      spawn-marines-at-base 16
+      spawn-marines-at-base 8
    ]
   ]
 end
@@ -352,7 +400,7 @@ to move-marines-patrol
         fd speed
       ]
       [
-        ifelse random 100 > marine-aggression [
+        ifelse random 100 > 50 [
           set retreat? true
           face home-base
           fd speed
@@ -541,9 +589,9 @@ PLOT
 224
 982
 374
-plot 1
-NIL
-NIL
+Killed Units
+time
+enemies killed 
 0.0
 10.0
 0.0
@@ -552,38 +600,18 @@ true
 false
 "" ""
 PENS
-"default" 1.0 0 -16777216 true "" "plot nva-killed"
-"pen-1" 1.0 0 -7500403 true "" "plot marines-killed"
+"default" 1.0 0 -2674135 true "" "plot nva-killed * 30"
+"pen-1" 1.0 0 -13345367 true "" "plot marines-killed * 30"
 
-SLIDER
-19
-401
-191
-434
-nva-aggression
-nva-aggression
+CHOOSER
+725
+148
+864
+193
+aircraft-type
+aircraft-type
+"B-52D" "F-4 Phantom II"
 0
-100
-50.0
-1
-1
-NIL
-HORIZONTAL
-
-SLIDER
-234
-415
-406
-448
-marine-aggression
-marine-aggression
-0
-100
-100.0
-1
-1
-NIL
-HORIZONTAL
 
 @#$#@#$#@
 ## WHAT IS IT?
