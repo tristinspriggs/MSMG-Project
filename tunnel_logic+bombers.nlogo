@@ -277,7 +277,25 @@ CHOOSER
 aircraft-type
 aircraft-type
 "B-52D" "F-4 Phantom II"
-1
+0
+
+PLOT
+791
+68
+991
+218
+Turtles Count
+Ticks
+Turtles
+0.0
+10.0
+0.0
+10.0
+true
+false
+"" ""
+PENS
+"default" 1.0 0 -16777216 true "" "plot count turtles"
 
 @#$#@#$#@
 ## WHAT IS IT?
