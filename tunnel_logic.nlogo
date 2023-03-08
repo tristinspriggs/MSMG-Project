@@ -1,21 +1,28 @@
+globals
+[
+  nva-killed
+  marines-killed
+]
 breed [tunnels tunnel]
 breed [holes hole]
 breed [bases base]
 breed [nvas nva]
 breed [marines marine]
-breed [enemies enemy]
 
-tunnels-own [prob dig-speed angle role stopped?]
+tunnels-own [prob dig-speed angle role close-holes far-holes
+  too-close too-far stopped? repel repel-x repel-y]
+nvas-own [speed prob role repel repel-from retreat?]
+holes-own [prob]
+bases-own [encircle-radius]
 marines-own [
   home-base
-  mode
-  attacking?
+  role
+  retreat?
   target
   energy
+  speed
 ]
-enemies-own [
-  target-base
-]
+
 patches-own [
   intelligence
   elevation
@@ -32,27 +39,212 @@ to setup
    set elevation 0
    set intelligence 0
   ]
-  spawn-enemies
+  ;set total-nvas num-nvas
   reset-ticks
 end
 
 to go
+  if ticks > 115200 [stop]
   grow-tunnels
-  grow-holes
+  tunnel-create-hole
   decide-base-attack
+  spawn-nva
+  move-nva
   move-marines
-  move-enemies
-  update-intelligence
-  tick
+  destroy-base
+  ;update-intelligence
+  destroy-holes
+  if any? bases [tick]
 end
 
+
+
+;; Logic & Movement
 to decide-base-attack
-  let radius 15
   ask bases [
-     ask tunnels in-radius radius [
+    ask tunnels in-radius encircle-radius [
       set color pink
-      set role "to-encircle"
+      if role = "to-base" [
+        set role "to-encircle"
+      ]
+      if role = "to-explore" [
+        set repel 10
+        set repel-x xcor
+        set repel-y ycor
+      ]
     ]
+    ask nvas in-radius encircle-radius [
+      set color pink
+      if role = "to-base" [
+        ;set role "to-wait"
+      ]
+      ;if role = "to-explore" [set role "to-wait"]
+    ]
+  ]
+end
+
+to grow-tunnels
+  ask tunnels [
+    let closest-base min-one-of bases [distance myself]
+    if role = "to-base" [
+      ifelse repel > 0 [
+        repel-tunnel
+       set repel repel - 1
+      ] [
+        face closest-base
+        forward dig-speed
+      ]
+    ]
+    if role = "to-encircle" [
+      face closest-base
+      rt angle
+      forward dig-speed / 10
+    ]
+    if role = "to-explore" [
+      set close-holes other turtles in-radius too-close
+      set far-holes other turtles in-radius too-far
+      ifelse any? close-holes  ; move to an open space
+      [ facexy (mean [xcor] of close-holes)
+        (mean [ycor] of close-holes)
+        rt 180
+        avoid-things
+        set color green
+        fd dig-speed
+        set stopped? false ]
+      [ ifelse any? far-holes  ; move to a more populated space
+        [ facexy mean [xcor] of other turtles
+          mean [ycor] of other turtles
+          avoid-things
+          set color orange
+          fd dig-speed
+          set stopped? false ]
+        [ set stopped? true ]
+      ]
+    ]
+  ]
+end
+
+to repel-tunnel
+  facexy repel-x repel-y
+  rt 180
+  forward dig-speed
+end
+
+
+to tunnel-create-hole
+  ask tunnels [
+    let p random-float 1
+    let num-tunnels count holes in-radius 10
+    if p < prob and num-tunnels = 0 [
+      spawn-hole xcor ycor
+    ]
+  ]
+end
+
+to move-nva
+  ask nvas [
+    ifelse retreat? [
+      if any? holes-here [set retreat? false]
+      face min-one-of holes [distance myself]
+      fd 1
+    ]
+    [
+      let closest-base min-one-of bases [distance myself]
+      ifelse any? marines in-radius 3 [
+        face min-one-of marines [distance myself]
+        if count nvas in-radius 3 <= count marines in-radius 3 [
+          set retreat? true
+          rt 180
+        ]
+        fd speed
+      ]
+      [
+        if role = "to-base" [
+          face closest-base
+          ;let angle-error 45
+          ;ifelse random 10 < 5
+          ;[ rt random-float angle-error ]
+          ;[ lt random-float angle-error ]
+          forward speed
+        ]
+        if role = "to-wait" [
+
+        ]
+        if role = "to-explore" [
+          rt random 40
+          lt random 40
+          fd speed
+        ]
+      ]
+      if any? marines in-radius 1 [
+        if random 100 < nva-kill-percent [
+          ask one-of marines [
+            set marines-killed marines-killed + 1
+            die
+          ]
+        ]
+      ]
+    ]
+  ]
+
+end
+
+;; Spawn turtles
+to new-nva [x y]
+  hatch-nvas 1[
+   setxy x y
+   set color red
+   set size 1    setxy x y
+    set color red
+    set shape "circle"
+    set size 1
+    set role one-of ["to-base" "to-wait" "to-explore"]
+    set speed 0.5
+    set prob random-float 0.0005
+    set retreat? false
+  ]
+end
+
+to spawn-nva
+  ask holes [
+    let p random-float 1
+    if p < prob [
+      new-nva xcor ycor
+    ]
+  ]
+end
+
+to spawn-hole [x y]
+  hatch-holes 1 [
+    setxy x y
+    set size 2
+    set color 32
+    set shape "circle"
+    set prob random-float 0.005
+  ]
+end
+
+to initialize-bases
+
+  create-bases 1 [
+    setxy  25 0
+    set shape "square"
+    set color 94
+    set size 10
+    set encircle-radius 10
+    spawn-marines-at-base 200
+  ]
+  let hill-coordinates [ [-45 35] [-20 55] ]
+  foreach hill-coordinates [
+   c ->
+   create-bases 1 [
+      setxy item 0 c item 1 c
+      set shape "square"
+      set color 94
+      set size 3
+      set encircle-radius 6
+      spawn-marines-at-base 8
+   ]
   ]
 end
 
@@ -66,245 +258,165 @@ to initialize-tunnels [num]
     set heading random 360
     set role one-of ["to-base" "to-explore"]
     set angle one-of [90 -90]
+    set too-close 10
+    set too-far 20
+    set stopped? false
+    set repel 0
   ]
   ask tunnels [
-    hatch-holes 1 [
-      setxy xcor ycor
-      set size 2
-      set color 33
-      set shape "circle"
-    ]
+    spawn-hole xcor ycor
   ]
 end
 
-to move-open-min ;; turtle procedure
-  let nearby-holes other holes in-radius 10
-  ifelse any? nearby-holes
-  [ facexy (mean [xcor] of nearby-holes)
-           (mean [ycor] of nearby-holes)
-    rt 180
-    avoid-walls
-    fd dig-speed
-    set stopped? false ]
-  [ set stopped? true ]
-end
-
-to grow-tunnels
-  ask tunnels [
-    let closest-base min-one-of bases [distance myself]
-    if role = "to-base" [
-      face closest-base
-      let angle-error 45
-      ifelse random 10 < 5
-      [ rt random-float angle-error ]
-      [ lt random-float angle-error ]
-      forward dig-speed
-    ]
-    if role = "to-encircle" [
-      face closest-base
-      rt angle
-      let angle-error 45
-      ifelse random 10 < 5
-      [ rt random-float angle-error ]
-      [ lt random-float angle-error ]
-      forward dig-speed / 10
-    ]
-    if role = "to-explore" [
-     let nearby-holes other holes in-radius 10
-      ifelse any? nearby-holes
-      [ facexy (mean [xcor] of nearby-holes)
-               (mean [ycor] of nearby-holes)
-        rt 180
-        avoid-walls
-        fd dig-speed
-        set stopped? false ]
-      [ set stopped? true ]
-    ]
-  ]
-end
-
-to avoid-walls ;; turtle procedure
+;;Helper functions
+to avoid-things ;; turtle procedure
   if not can-move? 1
   [ rt 180 ]
 end
 
-to grow-holes
-  ask tunnels [
-    let p random-float 1
-    let num-tunnels count holes in-radius 10
-    if p < prob and num-tunnels = 0 [
-      new-hole xcor ycor
-    ]
-  ]
-end
-
-to new-hole [x y]
-  hatch-holes 1 [
-    setxy x y
-    set size 2
-    set color 31
-    set shape "circle"
-  ]
-end
-
-to new-nva [x y]
-  hatch-nvas 1[
-   setxy x y
-   set color red
-   set size 1
-  ]
-end
-
-to initialize-bases
-
-  create-bases 1 [
-    setxy  25 0
-    set shape "square"
-    set color 94
-    set size 10
-    hatch-marines 5 [
-      set color cyan
-      set size 3
-      set home-base myself
-      set mode "garrison"
-      set target nobody
-      set energy 100
-    ]
-    hatch-marines 5 [
-      set color cyan
-      set size 3
-      set home-base myself
-      set mode "patrol"
-      set target nobody
-      set energy 100
-    ]
-  ]
-  let hill-coordinates [ [-45 35] [-20 55] ]
-  foreach hill-coordinates [
-   c ->
-   create-bases 1 [
-      setxy item 0 c item 1 c
-      set shape "square"
-      set color 94
-      set size 3
-      hatch-marines 5 [
-        set color cyan
-        set size 3
-        set home-base myself
-        set mode "garrison"
-        set target nobody
-        set energy 100
-      ]
-      hatch-marines 5 [
-        set color cyan
-        set size 3
-        set home-base myself
-        set mode "patrol"
-        set target nobody
-        set energy 100
-      ]
-   ]
-  ]
-end
-
 to move-marines
-  ask marines with [mode = "garrison"] [
+  ask marines with [role = "to-garrison"] [
     move-marines-garrison
   ]
-  ask marines with [mode = "patrol"] [
-    move-marines-patrol
+  ask marines with [role = "to-patrol"] [
+    ifelse retreat? [
+      if any? bases-here [
+        set retreat? false
+      ]
+      face home-base
+      fd 1
+    ]
+    [
+      move-marines-patrol
+    ]
+
   ]
 end
 
 to move-marines-garrison
   ifelse target = nobody [
-    set target one-of enemies in-radius 3
+    set target one-of nvas in-radius 5
     rt random 40
     lt random 40
     if not can-move? 1 [ rt 180 ]
     if distance home-base > 3 [ face home-base ]
-    fd 1
+    fd speed
   ]
   [
-    ifelse count enemies in-radius 3 <= count marines in-radius 3 [
-      ifelse distance home-base < 5 [
+    ifelse count nvas in-radius 5 <= count marines in-radius 3 [
+      ifelse distance home-base < 10 [
         face target
-        fd 1
+        fd speed
       ]
       [
         set target nobody
         face home-base
-        fd 1
+        fd speed
       ]
     ]
     [
       set target nobody
       face home-base
-      fd 1
+      fd speed
     ]
   ]
   if target != nobody and distance target < 1
   [
-    ask target [die]
+    ask target [
+      set nva-killed nva-killed + 1
+      die
+    ]
   ]
 end
 
 to move-marines-patrol
-  if distance home-base < 1 [ set energy 100 ]
+  if distance one-of bases < 1 [ set energy 720 ]
   ifelse energy = 0 [
-    face home-base
-    fd 1
+    face min-one-of bases [distance myself]
+    fd speed
   ]
   [
     ifelse target = nobody [
-      set target one-of enemies in-radius 3
+      set target one-of nvas in-radius 3
       rt random 40
       lt random 40
       if not can-move? 1 [ rt 180 ]
-      if distance home-base > 50 [ face home-base ]
-      fd 1
+      if any? holes in-radius 5 [
+        face one-of holes
+      ]
+      fd speed
     ]
     [
-      ifelse count enemies in-radius 3 <= count marines in-radius 3 [
+      ifelse count marines in-radius 10 <= count nvas in-radius 3 [
         face target
-        fd 1
+        fd speed
       ]
       [
-        set target nobody
-        rt 180
-        fd 1
+        ifelse random 100 > marine-aggression [
+          set retreat? true
+          face home-base
+          fd speed
+        ]
+        [
+          face target
+          fd speed
+        ]
+
       ]
 
     ]
     if target != nobody and distance target < 1
     [
-      ask target [die]
+      if random 100 < marines-kill-percent [
+        ask target [
+          set nva-killed nva-killed + 1
+          die
+        ]
+      ]
+
     ]
     set energy energy - 1
   ]
 
+
 end
 
-to move-enemies
-  ask enemies [
-    face target-base
-    rt random 10
-    lt random 10
-    if not can-move? 1 [ rt 180 ]
-    fd 1
+
+to destroy-base
+  if any? bases with [any? marines with [home-base = myself]]
+  [
+    ask bases [
+      if not any? marines with [home-base = myself]
+      [
+        let other-bases other bases
+      ]
+    ]
   ]
 end
 
-to spawn-enemies
-  create-enemies 100 [
-    setxy random-xcor random-ycor
-    set color red
-    set size 3
-    set target-base one-of bases
-  ]
+
+to spawn-marines-at-base [num]
+  hatch-marines num [
+    set color cyan
+    set shape "circle"
+    set size 1
+    set home-base myself
+    set target nobody
+    set energy 100
+    set speed 0.5
+    set retreat? false
+    ifelse random 100 < patrol-percent
+    [ set role "to-patrol" ]
+    [ set role "to-garrison" ]
+
+ ]
 end
 
-to retreat-marines
+to destroy-holes
+  ask holes
+  [
+    if count marines in-radius 3 > 1 [die]
+  ]
 end
 
 to update-intelligence
@@ -378,6 +490,115 @@ NIL
 NIL
 NIL
 1
+
+SLIDER
+12
+223
+193
+256
+marines-kill-percent
+marines-kill-percent
+0
+100
+75.0
+1
+1
+NIL
+HORIZONTAL
+
+SLIDER
+16
+280
+188
+313
+nva-kill-percent
+nva-kill-percent
+0
+100
+20.0
+1
+1
+NIL
+HORIZONTAL
+
+SLIDER
+15
+352
+187
+385
+num-nvas
+num-nvas
+0
+18000
+18000.0
+30
+1
+NIL
+HORIZONTAL
+
+SLIDER
+726
+101
+898
+134
+patrol-percent
+patrol-percent
+0
+100
+53.0
+1
+1
+NIL
+HORIZONTAL
+
+PLOT
+782
+224
+982
+374
+plot 1
+NIL
+NIL
+0.0
+10.0
+0.0
+10.0
+true
+false
+"" ""
+PENS
+"default" 1.0 0 -16777216 true "" "plot nva-killed"
+"pen-1" 1.0 0 -7500403 true "" "plot marines-killed"
+
+SLIDER
+19
+401
+191
+434
+nva-aggression
+nva-aggression
+0
+100
+50.0
+1
+1
+NIL
+HORIZONTAL
+
+SLIDER
+234
+415
+406
+448
+marine-aggression
+marine-aggression
+0
+100
+100.0
+1
+1
+NIL
+HORIZONTAL
 
 @#$#@#$#@
 ## WHAT IS IT?
