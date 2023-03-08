@@ -232,7 +232,7 @@ to initialize-bases
     set color 94
     set size 10
     set encircle-radius 10
-    spawn-marines-at-base 200
+    spawn-marines-at-base 400
   ]
   let hill-coordinates [ [-45 35] [-20 55] ]
   foreach hill-coordinates [
@@ -243,7 +243,7 @@ to initialize-bases
       set color 94
       set size 3
       set encircle-radius 6
-      spawn-marines-at-base 8
+      spawn-marines-at-base 16
    ]
   ]
 end
@@ -303,8 +303,8 @@ to move-marines-garrison
     fd speed
   ]
   [
-    ifelse count nvas in-radius 5 <= count marines in-radius 3 [
-      ifelse distance home-base < 10 [
+    ifelse count nvas in-radius 3 <= count marines in-radius 5 [
+      ifelse distance home-base <= [encircle-radius] of home-base [
         face target
         fd speed
       ]
@@ -347,7 +347,7 @@ to move-marines-patrol
       fd speed
     ]
     [
-      ifelse count marines in-radius 10 <= count nvas in-radius 3 [
+      ifelse count nvas in-radius 3 <= count marines in-radius 5 [
         face target
         fd speed
       ]
@@ -500,7 +500,7 @@ marines-kill-percent
 marines-kill-percent
 0
 100
-75.0
+30.0
 1
 1
 NIL
@@ -515,23 +515,8 @@ nva-kill-percent
 nva-kill-percent
 0
 100
-20.0
+4.0
 1
-1
-NIL
-HORIZONTAL
-
-SLIDER
-15
-352
-187
-385
-num-nvas
-num-nvas
-0
-18000
-18000.0
-30
 1
 NIL
 HORIZONTAL
@@ -545,7 +530,7 @@ patrol-percent
 patrol-percent
 0
 100
-53.0
+15.0
 1
 1
 NIL
